@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Reservas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-success">
+        <div class="container d-flex justify-content-between">
+            <a class="navbar-brand" href="{{ url_for('inicio') }}">Reserva tu cancha</a>
+            <div>
+                {% if session.get('user_id') %}
+                    <span class="text-white me-3">Hola, {{ session.get('username') }}</span>
+                    {% if session.get('role') == 'admin' %}
+                        <a class="btn btn-sm btn-outline-light me-2" href="{{ url_for('admin_register') }}">Registrar usuario</a>
+                    {% endif %}
+                    <a class="btn btn-sm btn-light" href="{{ url_for('logout') }}">Cerrar sesión</a>
+                {% else %}
+                    <a class="btn btn-sm btn-light" href="{{ url_for('login') }}">Iniciar sesión</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-4">
+                    {% for categoria, mensaje in messages %}
+                        <div class="alert alert-{{ categoria }} alert-dismissible fade show" role="alert">
+                            {{ mensaje }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 gap-3">
+            <div>
+                <h1 class="fw-bold mb-1">Agenda campo de futbol</h1>
+                <p class="text-muted mb-0">Revisa los horarios ocupados de lunes a domingo rápidamente.</p>
+            </div>
+            <div class="d-grid d-sm-inline-flex gap-2">
+                <!-- Vista detallada eliminada -->
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-4">
+                    <div class="card-body">
+                        <h2 class="h4 mb-3">Registrar reserva</h2>
+                        <form method="post" action="{{ url_for('reservar') }}" class="needs-validation" novalidate>
+                            <div class="mb-3">
+                                <label for="nombre" class="form-label">Nombre de la persona</label>
+                                <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej. Ana Pérez" value="{{ form_data.get('nombre', '') }}" required {% if formulario_bloqueado %}disabled{% endif %}>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="dia_form" class="form-label">Día de la semana</label>
+                                <select class="form-select" id="dia_form" name="dia" required>
+                                    <option value="" disabled {% if not dia_formulario %}selected{% endif %}>Selecciona un día</option>
+                                    {% for dia in dias %}
+                                        <option value="{{ dia }}" {% if dia_formulario == dia %}selected{% endif %}>{{ dia }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Al cambiar el día se actualizarán los horarios libres.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="hora_inicio" class="form-label">Selecciona la hora</label>
+                                <select class="form-select" id="hora_inicio" name="hora_inicio" required {% if formulario_bloqueado %}disabled{% endif %}>
+                                    <option value="" disabled {% if not form_data.get('hora_inicio') %}selected{% endif %}>Selecciona una hora</option>
+                                    {% for hora in horas_formulario %}
+                                        <option value="{{ hora.hora_inicio }}" {% if form_data.get('hora_inicio') == hora.hora_inicio %}selected{% endif %}>{{ hora.hora_inicio }} - {{ hora.hora_fin }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Selecciona la hora de inicio. Puedes reservar más de 1 hora usando la duración.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="duracion" class="form-label">Duración (horas)</label>
+                                <select class="form-select" id="duracion" name="duracion" {% if formulario_bloqueado %}disabled{% endif %}>
+                                    {% for n in [1,2,3] %}
+                                        <option value="{{ n }}" {% if duracion == n or (form_data.get('duracion') and form_data.get('duracion')|int == n) %}selected{% endif %}>{{ n }} hora{% if n > 1 %}s{% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">La reserva no puede exceder el horario de cierre a las 22:00.</div>
+                            </div>
+
+                            {% if formulario_bloqueado %}
+                                <div class="alert alert-secondary" role="alert">
+                                    No quedan horarios libres para {{ dia_formulario }}. Selecciona otro día.
+                                </div>
+                            {% elif hora_previa_no_disponible %}
+                                <div class="alert alert-warning" role="alert">
+                                    El horario seleccionado previamente ya fue reservado. Escoge otra hora disponible.
+                                </div>
+                            {% endif %}
+
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="submit" class="btn btn-success" {% if formulario_bloqueado %}disabled{% endif %}>Guardar reserva</button>
+                                <!-- Vista detallada eliminada -->
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+            <div class="col-lg-8">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+                            <div>
+                                <h2 class="h4 mb-0">Horarios de {{ dia_seleccionado }}</h2>
+                                <p class="text-muted small mb-0">Bloques de una hora entre 06:00 y 22:00.</p>
+                            </div>
+                            <form method="get" class="d-flex gap-2 align-items-center">
+                                <label for="dia_consulta" class="form-label mb-0">Día</label>
+                                <select class="form-select" id="dia_consulta" name="dia" onchange="this.form.submit()">
+                                    {% for dia in dias %}
+                                        <option value="{{ dia }}" {% if dia == dia_seleccionado %}selected{% endif %}>{{ dia }}</option>
+                                    {% endfor %}
+                                </select>
+                                <noscript>
+                                    <button type="submit" class="btn btn-success btn-sm">Ver</button>
+                                </noscript>
+                            </form>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Horario</th>
+                                        <th scope="col" class="w-50">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for segmento in segmentos %}
+                                        <tr>
+                                            <td class="fw-semibold">{{ segmento.hora_inicio }} - {{ segmento.hora_fin }}</td>
+                                            <td>
+                                                {% if segmento.estado == "Reservado" and segmento.reserva %}
+                                                    <span class="badge bg-danger">Reservado</span>
+                                                    <div class="mt-2 small">
+                                                        <strong>{{ segmento.reserva.nombre }}</strong><br>
+                                                        <span class="text-muted">{{ segmento.reserva.hora_inicio }} - {{ segmento.reserva.hora_fin }}</span>
+                                                    </div>
+                                                {% else %}
+                                                    <span class="badge bg-success-subtle text-success">Disponible</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-5">
+
+        <h2 class="h4 mb-3">Resumen semanal</h2>
+        <div class="row g-4">
+            {% for dia in dias %}
+                <div class="col-md-4 col-lg">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-success text-white">
+                            <h3 class="h6 mb-0">{{ dia }}</h3>
+                        </div>
+                        <div class="card-body">
+                            {% if reservas_por_dia[dia] %}
+                                <ul class="list-group list-group-flush">
+                                    {% for reserva in reservas_por_dia[dia] %}
+                                        <li class="list-group-item px-0">
+                                            <strong>{{ reserva.nombre }}</strong>
+                                            <br>
+                                            <small class="text-muted">{{ reserva.hora_inicio }} - {{ reserva.hora_fin }}</small>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="text-muted mb-0">Sin reservas registradas.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const diaFormSelect = document.getElementById('dia_form');
+        const duracionSelect = document.getElementById('duracion');
+        function recargarConParamsIndex(event) {
+            const diaValue = diaFormSelect ? diaFormSelect.value : '';
+            const durValue = duracionSelect ? duracionSelect.value : '';
+            if (diaValue) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('dia', diaValue);
+                if (durValue) url.searchParams.set('duracion', durValue);
+                window.location.href = url.toString();
+            }
+        }
+        if (diaFormSelect) diaFormSelect.addEventListener('change', recargarConParamsIndex);
+        if (duracionSelect) duracionSelect.addEventListener('change', recargarConParamsIndex);
+    </script>
+</body>
+</html>
