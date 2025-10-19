@@ -33,18 +33,19 @@
 
                         <form method="post" class="needs-validation" novalidate>
                             <div class="mb-3">
-                                <label for="nombre" class="form-label">Nombre de la persona</label>
-                                <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej. Ana Pérez" required>
+                                <label class="form-label">Reservará</label>
+                                <input type="text" class="form-control" value="{{ nombre_usuario }}" readonly>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="fecha" class="form-label">Fecha</label>
+                                <input type="date" class="form-control" id="fecha" name="fecha" value="{{ form_data.get('fecha', fecha_reserva if fecha_reserva is defined else '') }}" required>
+                                <div class="form-text">Selecciona la fecha exacta de la reserva.</div>
                             </div>
 
                             <div class="mb-3">
                                 <label for="dia" class="form-label">Día de la semana</label>
-                                <select class="form-select" id="dia" name="dia" required>
-                                    <option value="" selected disabled>Selecciona un día</option>
-                                    {% for dia in dias %}
-                                        <option value="{{ dia }}">{{ dia }}</option>
-                                    {% endfor %}
-                                </select>
+                                <input type="text" class="form-control" id="dia" name="dia" value="{{ form_data.get('dia') }}" readonly required>
                             </div>
 
                             <div class="mb-3">
@@ -53,12 +54,12 @@
                                     <option value="" selected disabled>Selecciona una hora</option>
                                     {% for item in horas_disponibles %}
                                         {% if item is mapping %}
-                                            <option value="{{ item.hora_inicio }}">{{ item.hora_inicio }} - {{ item.hora_fin }}</option>
+                                            <option value="{{ item.hora_inicio }}" {% if form_data.get('hora_inicio') == item.hora_inicio %}selected{% endif %}>{{ item.hora_inicio }} - {{ item.hora_fin }}</option>
                                         {% else %}
                                             {# compatibilidad: lista simple de strings #}
                                             {% set hora = item %}
                                             {% set hora_fin = '22:00' if loop.last else horas_disponibles[loop.index0 + 1] %}
-                                            <option value="{{ hora }}">{{ hora }} - {{ hora_fin }}</option>
+                                            <option value="{{ hora }}" {% if form_data.get('hora_inicio') == hora %}selected{% endif %}>{{ hora }} - {{ hora_fin }}</option>
                                         {% endif %}
                                     {% endfor %}
                                 </select>
@@ -88,18 +89,37 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Al cambiar día o duración recargamos para actualizar horas disponibles
-        const diaSelect = document.getElementById('dia');
+        const fechaInput = document.getElementById('fecha');
+        const diaInput = document.getElementById('dia');
         const duracionSelect = document.getElementById('duracion');
+
+        function actualizarDia() {
+            if (!fechaInput || !diaInput) return;
+            const fechaValue = fechaInput.value;
+            if (!fechaValue) return;
+            const fecha = new Date(fechaValue + 'T00:00');
+            if (isNaN(fecha.getTime())) return;
+            const diasSemana = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sabado'];
+            diaInput.value = diasSemana[fecha.getDay()];
+        }
+
         function recargarConParams() {
-            const dia = diaSelect ? diaSelect.value : '';
-            const dur = duracionSelect ? duracionSelect.value : '';
+            if (!fechaInput) return;
+            const fechaValue = fechaInput.value;
+            const durValue = duracionSelect ? duracionSelect.value : '';
             const url = new URL(window.location.href);
-            if (dia) url.searchParams.set('dia', dia);
-            if (dur) url.searchParams.set('duracion', dur);
+            if (fechaValue) url.searchParams.set('fecha', fechaValue);
+            if (durValue) url.searchParams.set('duracion', durValue);
             window.location.href = url.toString();
         }
-        if (diaSelect) diaSelect.addEventListener('change', recargarConParams);
+
+        if (fechaInput) {
+            actualizarDia();
+            fechaInput.addEventListener('change', () => {
+                actualizarDia();
+                recargarConParams();
+            });
+        }
         if (duracionSelect) duracionSelect.addEventListener('change', recargarConParams);
     </script>
 </body>
